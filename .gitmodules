@@ -1,3 +1,6 @@
 [submodule "pypho"]
-    path = pypho
+	path = lib/pypho
     url = git@gitlab.lrz.de:hm-striegle/pypho.git
+[submodule "lib/pyfda"]
+	path = lib/pyfda
+	url = git@github.com:chipmuenk/pyfda.git
