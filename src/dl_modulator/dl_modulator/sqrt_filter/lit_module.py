@@ -1,95 +1,15 @@
 import numpy as np
-import pandas as pd
 import torch
 from matplotlib import pyplot as plt
-from pytorch_lightning import LightningDataModule, LightningModule, Trainer
-from sklearn.model_selection import train_test_split
+from pytorch_lightning import LightningModule, Trainer
 from torch import nn
-from torch.utils.data import DataLoader, Dataset
 
-from config import Config, SqrtFilterParams
-from sqrt_RNN_filter import generate_sqrt_filter_train_data
-
-
-class SqrtFilterDataset(Dataset):
-    def __init__(self, X: np.ndarray, Y: np.ndarray):
-        self.X = X
-        self.Y = Y
-
-    def __len__(self):
-        return len(self.X)
-
-    def __getitem__(self, idx):
-        return torch.from_numpy(self.X[idx]).to(torch.float32), torch.from_numpy(
-            self.Y[idx]
-        ).to(torch.float32)
+from ..config import Config, SqrtFilterParams
+from .filter_dataset import SqrtFilterDataModule
+from .sqrt_filter import generate_sqrt_filter_train_data
 
 
-class SqrtFilterDataModule(LightningDataModule):
-    test_data: SqrtFilterDataset
-    train_data: SqrtFilterDataset
-    val_data: SqrtFilterDataset
-
-    def __init__(self, config: Config, batch_size: int):
-        super().__init__()
-        self.config = config
-        self.batch_size = batch_size
-        self.train_data = None  # type: ignore
-        self.test_data = None  # type: ignore
-        self.val_data = None  # type: ignore
-
-    def prepare_data(self):
-        df = pd.read_pickle(
-            self.config.paths.data / "sqrt_filter" / "sqrt_filter_12.pickle"
-        )
-        X = np.array(df["E_in"].tolist())
-        Y = np.array(df["E_out"].tolist())
-
-        # Split the data into training and temporary sets (60:40)
-        X_train, X_temp, Y_train, Y_temp = train_test_split(
-            X, Y, test_size=0.4, random_state=42
-        )
-
-        # Split the temporary set into validation and test sets (50:50)
-        X_val, X_test, Y_val, Y_test = train_test_split(
-            X_temp, Y_temp, test_size=0.5, random_state=42
-        )
-
-        self.train_data = SqrtFilterDataset(X_train, Y_train)
-        self.val_data = SqrtFilterDataset(X_val, Y_val)
-        self.test_data = SqrtFilterDataset(X_test, Y_test)
-
-    def train_dataloader(self) -> DataLoader:
-        return DataLoader(
-            self.train_data,
-            batch_size=self.batch_size,
-            shuffle=True,
-            num_workers=self.config.num_workers,
-        )
-
-    def val_dataloader(self) -> DataLoader:
-        return DataLoader(
-            self.val_data,
-            batch_size=self.batch_size,
-            num_workers=self.config.num_workers,
-        )
-
-    def test_dataloader(self) -> DataLoader:
-        return DataLoader(
-            self.test_data,
-            batch_size=self.batch_size,
-            num_workers=self.config.num_workers,
-        )
-
-    def predict_dataloader(self) -> DataLoader:
-        return DataLoader(
-            self.test_data,
-            batch_size=self.batch_size,
-            num_workers=self.config.num_workers,
-        )
-
-
-class LinearModel(LightningModule):
+class LitSqrtFilterModule(LightningModule):
     def __init__(self, input_dim, output_dim):
         super().__init__()
         self.layer = nn.Linear(input_dim, output_dim, bias=False)
@@ -122,7 +42,7 @@ class LinearModel(LightningModule):
 
 
 def main():
-    config = Config(sqrt_filter_params=SqrtFilterParams(num_trials=30000))
+    config = Config()
     generate_sqrt_filter_train_data(config)
     print("Data generated")
     data_module = SqrtFilterDataModule(
@@ -130,7 +50,7 @@ def main():
     )
     data_module.prepare_data()
 
-    model = LinearModel(
+    model = LitSqrtFilterModule(
         config.sqrt_filter_params.nos * config.sqrt_filter_params.sps,
         config.sqrt_filter_params.nos * config.sqrt_filter_params.sps,
     )
@@ -162,10 +82,10 @@ def main():
 
 def test():
 
-    config = Config(sqrt_filter_params=SqrtFilterParams(num_trials=1000))
+    config = Config(sqrt_filter_params=SqrtFilterParams(num_samples=1000))
     trainer = Trainer(max_epochs=config.sqrt_filter_params.num_epochs)
     # Initialize the model
-    model = LinearModel(
+    model = LitSqrtFilterModule(
         config.sqrt_filter_params.nos * config.sqrt_filter_params.sps,
         config.sqrt_filter_params.nos * config.sqrt_filter_params.sps,
     )

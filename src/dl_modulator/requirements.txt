@@ -12,3 +12,4 @@ pandarallel
 torchviz
 numpy
 seaborn
+pyfda

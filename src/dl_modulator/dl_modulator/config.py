@@ -1,16 +1,19 @@
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Dict, Literal, Optional
 
 import mlflow
+import psutil
 from pydantic import Field, ValidationInfo, field_validator, model_validator
 
-from utils import YamlBaseModel
+from .utils import YamlBaseModel
+
+ROOT = Path(__file__).parents[3].resolve()
 
 
 class Paths(YamlBaseModel):
-    root: Path = Field(default_factory=lambda: Path(__file__).parent.resolve())
+    root: Path = Field(default=ROOT)
     data: Annotated[Path, Field(default=".data", validate_default=True)]
     checkpoints: Annotated[
         Path, Field(default=".logs/checkpoints", validate_default=True)
@@ -71,16 +74,11 @@ class SqrtFilterParams(YamlBaseModel):
     nos: int = 128 * 1
     sps: int = 32
     symbolrate: float = 40e9
-    num_trials: int = 30000
+    num_samples: int = 30000
     n_features: int = 4
     samplen: bool = False
     batch_size: int = 128
     num_epochs: int = 100
-
-
-class Hyperparameters(YamlBaseModel):
-    num_epochs: int = 100
-    batch_size: int = 128
 
 
 class MLflowConfig(YamlBaseModel):
@@ -90,9 +88,38 @@ class MLflowConfig(YamlBaseModel):
 
 
 class Config(YamlBaseModel):
-    num_workers: int = 0
+    is_debug: bool = False
+    verbose: bool = True
+    from_ckpt: Optional[str] = None
+    is_multiproc: bool = True
+    num_workers: Optional[int] = None
+    is_optuna: bool = False
+    is_lr_scheduler: bool = False
+    pin_memory: bool = True
+    max_epochs: int = 50
+    early_stopping_patience: int = 2
+    log_every_n_steps: int = 8
+    is_gpu: bool = True
+    is_fast_dev_run: bool = False
+    active_callbacks: Dict[
+        Literal[
+            "ModelCheckpoint",
+            "TQDMProgressBar",
+            "EarlyStopping",
+            "BatchSizeFinder",
+            "LearningRateMonitor",
+            "ModelSummary",
+        ],
+        bool,
+    ] = {
+        "ModelCheckpoint": True,
+        "TQDMProgressBar": True,
+        "EarlyStopping": True,
+        "BatchSizeFinder": False,
+        "LearningRateMonitor": False,
+        "ModelSummary": True,
+    }
     paths: Paths = Field(default_factory=Paths)
-    sqrt_filter_params: SqrtFilterParams = Field(default_factory=SqrtFilterParams)
     mlflow_config: MLflowConfig = Field(default_factory=MLflowConfig)
 
     def dump_yaml(self) -> None:
@@ -108,23 +135,23 @@ class Config(YamlBaseModel):
             else mlflow.create_experiment(self.mlflow_config.experiment_name)
         )
         self.mlflow_config.experiment_id = experiment_id
-        if self.mlflow_config.run_name is None:
-            last_run = mlflow.search_runs(
-                order_by=["start_time DESC"],
-                max_results=1,
-                experiment_ids=[experiment_id],
-            )
+        last_run = mlflow.search_runs(
+            order_by=["start_time DESC"], max_results=1, experiment_ids=[experiment_id]
+        )
 
-            if last_run.empty:
-                next_run_num = 1
-            else:
-                last_run_label = last_run.iloc[0]["tags.mlflow.runName"]
-                last_run_num = int(last_run_label.split("-")[0][1:])
-                next_run_num = last_run_num + 1
+        if last_run.empty:
+            next_run_num = 1
+        else:
+            last_run_label = last_run.iloc[0]["tags.mlflow.runName"]
+            last_run_num = int(last_run_label.split("-")[0][1:])
+            next_run_num = last_run_num + 1
 
-            self.mlflow_config.run_name = (
-                f"R{next_run_num:03d}-{datetime.now().strftime('%b%d-%H:%M')}"
-            )
+        self.mlflow_config.run_name = (
+            f"R{next_run_num:03d}-{datetime.now().strftime('%b%d-%H:%M')}"
+        )
+
+        if self.num_workers is None and self.is_multiproc:
+            self.num_workers = psutil.cpu_count(logical=True)
 
         return self
 
@@ -138,14 +165,19 @@ class Config(YamlBaseModel):
 
     @classmethod
     def read(cls, file_name: str) -> "Config":
-        config_file = (
-            Path(__file__).parent.resolve() / ".configs" / file_name
-        ).with_suffix(".yaml")
+        config_file = (ROOT / ".configs" / file_name).with_suffix(".yaml")
         assert config_file.exists(), f"{config_file} does not exist"
         return cls.from_yaml(config_file)  # type: ignore
 
 
+class HyperParameters(YamlBaseModel):
+    batch_size: int = 128
+    learning_rate: float = 1e-3
+    weight_decay: float = 1e-4
+    num_epochs: int = 100
+
+
 if __name__ == "__main__":
-    config = Config.read("R001-Apr17-10:50")
-    print(config)
-    config.dump()
+    config = Config.read("R001-Apr22")
+    # config.dump()
+    pass
