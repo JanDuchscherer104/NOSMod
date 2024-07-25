@@ -1,14 +1,7 @@
-from .config import Config, HyperParameters, SqrtFilterParams
-from .lit_trainer_factory import LitTrainerFactory
-from .sqrt_filter.filter_dataset import SqrtFilterDataModule, SqrtFilterDataset
-from .sqrt_filter.lit_module import LitSqrtFilterModule
+from rich.console import Console
 
-__all__ = [
-    "Config",
-    "HyperParameters",
-    "SqrtFilterParams",
-    "LitTrainerFactory",
-    "SqrtFilterDataModule",
-    "SqrtFilterDataset",
-    "LitSqrtFilterModule",
-]
+from .sqrt_filter.raised_cosine_filter import RaisedCosineParams
+
+CONSOLE = Console(width=120)
+
+__all__ = ["RaisedCosineParams", "CONSOLE"]
