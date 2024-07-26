@@ -121,12 +121,19 @@ class RaisedCosineFilter(nn.Module):
         self,
         input_signal: Optional[Tensor] = None,
         filtered_signal: Optional[Tensor] = None,
+        x_lim: Optional[float] = None,
+        is_norm_xaxis: bool = False,
+        title: Optional[str] = None,
     ):
-        f = np.linspace(
-            -0.5,
-            0.5,
-            self.params.num_samples,
-        )  # Normalized frequency axis
+        f = (
+            np.linspace(
+                -self.params.sampling_freq / 2,
+                self.params.sampling_freq / 2,
+                self.params.num_samples,
+            )
+            if not is_norm_xaxis
+            else np.linspace(-0.5, 0.5, self.params.num_samples)
+        )
         plt.figure(figsize=(10, 5))
         sns.set_style("whitegrid")
 
@@ -137,15 +144,21 @@ class RaisedCosineFilter(nn.Module):
             magnitude_filtered = np.abs(filtered_signal_fft.numpy())
             sns.lineplot(x=f, y=magnitude_input, label="Input Signal")
             sns.lineplot(x=f, y=magnitude_filtered, label="Filtered Signal")
-            title = "Frequency Response of Input and Filtered Signals"
+            title = title or "Frequency Response of Input and Filtered Signals"
         else:
             magnitude = torch.abs(self.frequency_response).numpy()
             sns.lineplot(x=f, y=magnitude)
-            title = "Frequency Response of Raised Cosine Filter"
+            title = title or "Frequency Response of Raised Cosine Filter"
 
         plt.title(title)
-        plt.xlabel("Normalized Frequency (f / f_s)")
+        plt.xlabel(
+            "Normalized Frequency (f / f_s)" if is_norm_xaxis else "Frequency (Hz)"
+        )
         plt.ylabel("Magnitude")
+
+        if x_lim:
+            plt.xlim(-x_lim, x_lim)
+
         sns.despine()
         plt.tight_layout()
         plt.show()
@@ -155,33 +168,39 @@ class RaisedCosineFilter(nn.Module):
         input_signal: Optional[Tensor] = None,
         filtered_signal: Optional[Tensor] = None,
         x_lim: Optional[float] = None,
+        is_norm_xaxis: bool = False,
+        title: Optional[str] = None,
     ):
         t = (
             np.linspace(
+                -4 / self.params.sampling_freq,
+                4 / self.params.sampling_freq,
+                self.params.num_samples,
+            )
+            if not is_norm_xaxis
+            else np.linspace(
                 -self.params.num_samples // 2,
                 self.params.num_samples // 2,
                 self.params.num_samples,
             )
-            / self.params.sampling_freq
-        ) / (
-            1 / self.params.sps
-        )  # Normalized time axis
+            / self.params.sps
+        )
         plt.figure(figsize=(10, 5))
         sns.set_style("whitegrid")
 
         if input_signal is not None and filtered_signal is not None:
-            input_signal_np = input_signal.numpy().real
-            filtered_signal_np = filtered_signal.numpy().real
+            input_signal_np = np.abs(input_signal.numpy())
+            filtered_signal_np = np.abs(filtered_signal.numpy())
             sns.lineplot(x=t, y=input_signal_np, label="Input Signal")
             sns.lineplot(x=t, y=filtered_signal_np, label="Filtered Signal")
-            title = "Time Response of Input and Filtered Signals"
+            title = title or "Time Response of Input and Filtered Signals"
         else:
-            impulse = torch.fft.fftshift(self.impulse_response).numpy().real
+            impulse = np.abs(torch.fft.fftshift(self.impulse_response).numpy())
             sns.lineplot(x=t, y=impulse)
-            title = "Impulse Response of Raised Cosine Filter"
+            title = title or "Impulse Response of Raised Cosine Filter"
 
         plt.title(title)
-        plt.xlabel("Normalized Time (t / T)")
+        plt.xlabel("Normalized Time (t / T)" if is_norm_xaxis else "Time (s)")
         plt.ylabel("Amplitude")
 
         if x_lim:
