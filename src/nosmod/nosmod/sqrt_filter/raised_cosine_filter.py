@@ -12,6 +12,10 @@ from ..utils import CONSOLE, BaseConfig
 
 
 class RaisedCosineParams(BaseConfig["RaisedCosineFilter"]):
+    """
+    Configuration parameters for the Raised Cosine Filter.
+    """
+
     target: Annotated[
         Type["RaisedCosineFilter"],
         Field(..., default_factory=lambda: RaisedCosineFilter),
@@ -33,6 +37,16 @@ class RaisedCosineParams(BaseConfig["RaisedCosineFilter"]):
     def __validate_bandwidth_and_rolloff(
         cls, v: Optional[float], info: ValidationInfo
     ) -> float:
+        """
+        Validate and calculate the bandwidth and roll-off factor.
+
+        Args:
+            v (Optional[float]): Value to validate.
+            info (ValidationInfo): Information about the validation context.
+
+        Returns:
+            float: Validated and calculated value.
+        """
         values = info.data
         if info.field_name == "bandwidth":
             if v is None and values.get("rolloff_fact") is None:
@@ -48,6 +62,16 @@ class RaisedCosineParams(BaseConfig["RaisedCosineFilter"]):
 
     @field_validator("num_samples", "nos", "sps", mode="before")
     def __validate_num_samples(cls, v: Optional[int], info: ValidationInfo) -> int:
+        """
+        Validate and calculate the number of samples.
+
+        Args:
+            v (Optional[int]): Value to validate.
+            info (ValidationInfo): Information about the validation context.
+
+        Returns:
+            int: Validated and calculated value.
+        """
         values = info.data
         if v is None:
             v = values["nos"] * values["sps"]
@@ -56,11 +80,21 @@ class RaisedCosineParams(BaseConfig["RaisedCosineFilter"]):
 
 
 class RaisedCosineFilter(nn.Module):
+    """
+    Raised Cosine Filter implemented as a PyTorch module.
+    """
+
     params: RaisedCosineParams
     frequency_response: Tensor
-    impulse_response: Optional[Tensor]  # shape: (num_samples,
+    impulse_response: Optional[Tensor]
 
     def __init__(self, params: RaisedCosineParams):
+        """
+        Initialize the Raised Cosine Filter.
+
+        Args:
+            params (RaisedCosineParams): Configuration parameters for the filter.
+        """
         super().__init__()
 
         self.params = params
@@ -69,12 +103,27 @@ class RaisedCosineFilter(nn.Module):
         CONSOLE.print(f"Instantiated {self.__class__.__name__} with params: {params}")
 
     def forward(self, x: Tensor) -> Tensor:
+        """
+        Forward pass of the Raised Cosine Filter.
+
+        Args:
+            x (Tensor['N, complex64']): Input signal to be filtered.
+
+        Returns:
+            Tensor['N, complex64']: Filtered signal.
+        """
         signal_fft = torch.fft.fft(x)
         filtered_signal_fft = signal_fft * self.frequency_response
         filtered_signal = torch.fft.ifft(filtered_signal_fft) / self.params.num_samples
         return filtered_signal
 
     def calculate_frequency_response(self) -> Tensor:
+        """
+        Calculate the frequency response of the Raised Cosine Filter.
+
+        Returns:
+            Tensor['N, float64']: Frequency response of the filter.
+        """
         f = torch.linspace(
             -self.params.sampling_freq / 2,
             self.params.sampling_freq / 2,
@@ -111,7 +160,13 @@ class RaisedCosineFilter(nn.Module):
 
         return freq_response * 10 ** (-self.params.attenuation_db / 10)
 
-    def calculate_impulse_response(self):
+    def calculate_impulse_response(self) -> Tensor:
+        """
+        Calculate the impulse response of the Raised Cosine Filter.
+
+        Returns:
+            Tensor['N, complex64']: Impulse response of the filter.
+        """
         assert self.frequency_response is not None
         freq_response_shifted = torch.fft.ifftshift(self.frequency_response)
         h = torch.fft.ifft(freq_response_shifted)
@@ -126,6 +181,16 @@ class RaisedCosineFilter(nn.Module):
         is_norm_xaxis: bool = False,
         title: Optional[str] = None,
     ):
+        """
+        Plot the frequency response of the Raised Cosine Filter.
+
+        Args:
+            input_signal (Optional[Tensor['N, complex64']]): Optional input signal to plot.
+            filtered_signal (Optional[Tensor['N, complex64']]): Optional filtered signal to plot.
+            x_lim (Optional[float]): Limit for the x-axis.
+            is_norm_xaxis (bool): Whether to normalize the x-axis.
+            title (Optional[str]): Title for the plot.
+        """
         f = (
             np.linspace(
                 -self.params.sampling_freq / 2,
@@ -172,6 +237,16 @@ class RaisedCosineFilter(nn.Module):
         is_norm_xaxis: bool = False,
         title: Optional[str] = None,
     ):
+        """
+        Plot the impulse response of the Raised Cosine Filter.
+
+        Args:
+            input_signal (Optional[Tensor['N, complex64']]): Optional input signal to plot.
+            filtered_signal (Optional[Tensor['N, complex64']]): Optional filtered signal to plot.
+            x_lim (Optional[float]): Limit for the x-axis.
+            is_norm_xaxis (bool): Whether to normalize the x-axis.
+            title (Optional[str]): Title for the plot.
+        """
         t = (
             np.linspace(
                 -4 / self.params.sampling_freq,
