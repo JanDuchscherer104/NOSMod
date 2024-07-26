@@ -8,7 +8,7 @@ from pydantic import Field, ValidationInfo, field_validator, model_validator
 from torch import Tensor, nn
 from typing_extensions import Annotated
 
-from ..utils import BaseConfig
+from ..utils import CONSOLE, BaseConfig
 
 
 class RaisedCosineParams(BaseConfig["RaisedCosineFilter"]):
@@ -57,8 +57,8 @@ class RaisedCosineParams(BaseConfig["RaisedCosineFilter"]):
 
 class RaisedCosineFilter(nn.Module):
     params: RaisedCosineParams
-    frequency_response: Optional[Tensor]
-    impulse_response: Optional[Tensor]
+    frequency_response: Tensor
+    impulse_response: Optional[Tensor]  # shape: (num_samples,
 
     def __init__(self, params: RaisedCosineParams):
         super().__init__()
@@ -66,6 +66,7 @@ class RaisedCosineFilter(nn.Module):
         self.params = params
         self.frequency_response = self.calculate_frequency_response()
         self.impulse_response = self.calculate_impulse_response()
+        CONSOLE.print(f"Instantiated {self.__class__.__name__} with params: {params}")
 
     def forward(self, x: Tensor) -> Tensor:
         signal_fft = torch.fft.fft(x)

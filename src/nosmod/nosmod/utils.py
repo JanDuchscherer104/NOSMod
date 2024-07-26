@@ -1,8 +1,9 @@
 from pathlib import Path
-from typing import Any, Callable, Generic, Type, TypeVar, Union
+from typing import Any, Callable, Generic, Literal, Type, TypeVar, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_yaml import parse_yaml_file_as, to_yaml_file
+from rich.console import Console as RichConsole
 
 TargetType = TypeVar("TargetType")
 
@@ -41,3 +42,16 @@ class BaseConfig(BaseModel, Generic[TargetType]):
                 f'{field_name}: (value={getattr(self, field_name)}, type={field.annotation.__name__}, description="{field.description}")'
             )
         return "\n    ".join(lines)
+
+
+class _Console(RichConsole):
+    _instance: RichConsole = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(_Console, cls).__new__(cls)
+            cls._instance.__init__(*args, **kwargs)
+        return cls._instance
+
+
+CONSOLE = _Console(width=120)
