@@ -1,0 +1,6 @@
+- What symbols should we encode? In which space / symbol representation should metrics be applied?
+- Consider joint encoding of both polarizations?
+- Limit or define the number of constellation points in the NN modulator.
+- Consider the carrier and sampling frequency in modulator / demodulator?
+- We should consider opeartion in time domain to include more realistic channel effects.
+- Predict discrete constellation points or continous values in the complex plane?
