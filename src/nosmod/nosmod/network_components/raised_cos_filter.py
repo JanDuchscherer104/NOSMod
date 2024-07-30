@@ -11,14 +11,14 @@ from typing_extensions import Annotated
 from ..utils import CONSOLE, BaseConfig
 
 
-class RaisedCosineParams(BaseConfig["RaisedCosineFilter"]):
+class RaisedCosParams(BaseConfig["RaisedCosFilter"]):
     """
     Configuration parameters for the Raised Cosine Filter.
     """
 
     target: Annotated[
-        Type["RaisedCosineFilter"],
-        Field(..., default_factory=lambda: RaisedCosineFilter),
+        Type["RaisedCosFilter"],
+        Field(..., default_factory=lambda: RaisedCosFilter),
     ]
     center_freq: float = Field(..., description="Center frequency in Hz", gt=0)
     rolloff_fact: float = Field(
@@ -32,6 +32,10 @@ class RaisedCosineParams(BaseConfig["RaisedCosineFilter"]):
     bandwidth: Annotated[
         float, Field(None, description="Bandwidth in Hz, B=fs/2*(1+rolloff)")
     ]
+    input_is_time_domain: bool = Field(False, description="Input is in time domain")
+    conv_in_time_domain: bool = Field(
+        False, description="Conv(impulse_response, signal) if input_is_time_domain=True"
+    )
 
     @field_validator("bandwidth", "rolloff_fact", mode="before")
     def __validate_bandwidth_and_rolloff(
@@ -79,16 +83,16 @@ class RaisedCosineParams(BaseConfig["RaisedCosineFilter"]):
         return v
 
 
-class RaisedCosineFilter(nn.Module):
+class RaisedCosFilter(nn.Module):
     """
     Raised Cosine Filter implemented as a PyTorch module.
     """
 
-    params: RaisedCosineParams
+    params: RaisedCosParams
     frequency_response: Tensor
     impulse_response: Optional[Tensor]
 
-    def __init__(self, params: RaisedCosineParams):
+    def __init__(self, params: RaisedCosParams):
         """
         Initialize the Raised Cosine Filter.
 
@@ -104,23 +108,54 @@ class RaisedCosineFilter(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         """
-        Forward pass of the Raised Cosine Filter.
+        Apply the filter to the input signal based on the specified parameters.
 
         Args:
-            x (Tensor['N, complex64']): Input signal to be filtered.
+            x (Tensor): Input signal.
 
         Returns:
-            Tensor['N, complex64']: Filtered signal.
+            Tensor: Filtered signal.
         """
-        signal_fft = torch.fft.fft(x)
-        filtered_signal_fft = signal_fft * self.frequency_response
-        filtered_signal = torch.fft.ifft(filtered_signal_fft) / self.params.num_samples
-        return filtered_signal
+        if self.params.input_is_time_domain:
+            if self.params.conv_in_time_domain:
+                return self.apply_in_time_domain(x)
+            else:
+                x_freq = torch.fft.fft(x)
+                filtered_x_freq = self.apply_in_frequency_domain(x_freq)
+                return torch.fft.ifft(filtered_x_freq)
+        else:
+            return self.apply_in_frequency_domain(x)
+
+    def apply_in_time_domain(self, signal: Tensor) -> Tensor:
+        """
+        Apply the raised cosine filter in the time domain by convolving the input signal with the impulse response.
+
+        Args:
+            signal (Tensor['N, complex128']): Input signal.
+
+        Returns:
+            Tensor['N, complex128']: Filtered signal.
+        """
+        filtered_signal = torch.nn.functional.conv1d(
+            signal.view(1, 1, -1), self.impulse_response.view(1, 1, -1), padding="same"
+        )
+        return filtered_signal.view(-1)
+
+    def apply_in_frequency_domain(self, signal: Tensor) -> Tensor:
+        """
+        Apply the raised cosine filter in the frequency domain by multiplying the Fourier transform of the input signal with the frequency response.
+
+        Args:
+            signal (Tensor['N, complex128']): Input signal.
+
+        Returns:
+            Tensor['N, complex128']: Filtered signal.
+        """
+        filtered_signal_fft = signal * self.frequency_response
+        return filtered_signal_fft
 
     def calculate_frequency_response(self) -> Tensor:
         """
-        Calculate the frequency response of the Raised Cosine Filter.
-
         Returns:
             Tensor['N, float64']: Frequency response of the filter.
         """
@@ -162,8 +197,6 @@ class RaisedCosineFilter(nn.Module):
 
     def calculate_impulse_response(self) -> Tensor:
         """
-        Calculate the impulse response of the Raised Cosine Filter.
-
         Returns:
             Tensor['N, complex64']: Impulse response of the filter.
         """
@@ -182,8 +215,6 @@ class RaisedCosineFilter(nn.Module):
         title: Optional[str] = None,
     ):
         """
-        Plot the frequency response of the Raised Cosine Filter.
-
         Args:
             input_signal (Optional[Tensor['N, complex64']]): Optional input signal to plot.
             filtered_signal (Optional[Tensor['N, complex64']]): Optional filtered signal to plot.
