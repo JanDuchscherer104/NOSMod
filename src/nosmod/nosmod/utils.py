@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Callable, Generic, Optional, Type, TypeVar, Union
 from warnings import formatwarning, warn
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_yaml import parse_yaml_file_as, to_yaml_file
 from rich.console import Console as RichConsole
 
@@ -33,7 +33,7 @@ TargetType = TypeVar("TargetType")
 
 
 class BaseConfig(BaseModel, Generic[TargetType]):
-    target: Callable[["BaseConfig[TargetType]"], TargetType]
+    target: Callable = Field(default_factory=lambda: None)
 
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_default=True)
 
@@ -55,7 +55,15 @@ class BaseConfig(BaseModel, Generic[TargetType]):
         return "\n    ".join(lines)
 
     def setup_target(self, **kwargs: Any) -> TargetType:
-        return getattr(self.target, "setup_target", self.target)(self, **kwargs)
+        if not callable(factory := getattr(self.target, "setup_target", self.target)):
+            CONSOLE.print(
+                f"Target '[bold yellow]{self.target}[/bold yellow]' of type [bold yellow]{factory.__class__.__name__}[/bold yellow] is not callable."
+            )
+            raise ValueError(
+                f"Target '{self.target}' of type {factory.__class__.__name__} is not callable / does not have a 'setup_target' or '__init__' method."
+            )
+
+        return factory(self, **kwargs)  # type: ignore
 
     def inspect(self) -> str:
         lines = [self.__class__.__name__ + ":"]
