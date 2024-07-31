@@ -16,10 +16,7 @@ class RaisedCosParams(BaseConfig["RaisedCosFilter"]):
     Configuration parameters for the Raised Cosine Filter.
     """
 
-    target: Annotated[
-        Type["RaisedCosFilter"],
-        Field(..., default_factory=lambda: RaisedCosFilter),
-    ]
+    target: Type["RaisedCosFilter"] = Field(default_factory=lambda: RaisedCosFilter)
     center_freq: float = Field(..., description="Center frequency in Hz", gt=0)
     rolloff_fact: float = Field(
         None, description="Roll-off factor, 0 <= alpha <= 1", ge=0, le=1
