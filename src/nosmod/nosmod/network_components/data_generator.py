@@ -1,5 +1,5 @@
 from enum import Enum, auto
-from typing import Tuple
+from typing import Tuple, Type
 
 import torch
 from pydantic import Field, field_validator
@@ -13,12 +13,15 @@ TODO: Split in (test, val): do not generate new data for each epoch!
 """
 
 
-class NosmodDatasetParams(BaseConfig):
-    split: Stage
-    alphabet: "AlphabetType"
-    num_samples: int = 1000
+class NosmodDataGeneratorParams(BaseConfig["NosmodDataGenerator"]):
+    target: Type["NosmodDataGenerator"] = Field(
+        default_factory=lambda: NosmodDataGenerator
+    )
+    split: Stage = Field(default=Stage.TRAIN)
+    alphabet: "AlphabetType" = Field(default_factory=lambda: AlphabetType.DIGITAL)
     num_symbols: int = 128
-    sps: int = 32
+    num_samples: int = 1000
+    samples_per_symbol: int = 32
     alphabet_size: int = 4
     generate_per_epoch: bool = True
 
@@ -30,39 +33,58 @@ class NosmodDatasetParams(BaseConfig):
 
 
 class DigitalAlphabet(Dataset):
-    def __init__(self, params: NosmodDatasetParams):
+    def __init__(self, params: NosmodDataGeneratorParams):
         self.params = params
 
     def __len__(self):
         return self.params.num_samples
 
-    def __getitem__(self, idx) -> Tuple[Tensor, Tensor]:
-        # Generate random symbols in the range [0, alphabet_size)
-        x_x = torch.randint(0, self.params.alphabet_size, (self.params.num_symbols,))
-        x_y = torch.randint(0, self.params.alphabet_size, (self.params.num_symbols,))
-        return x_x, x_y
+    def __getitem__(self, idx) -> Tensor:
+        """_summary_
+
+        Args:
+            idx (_type_): _description_
+
+        Returns:
+            Tensor["num_symbols, 2", float32]: _description_
+        """
+        x_xy = torch.stack(
+            (
+                torch.randint(0, self.params.alphabet_size, (self.params.num_symbols,)),
+                torch.randint(0, self.params.alphabet_size, (self.params.num_symbols,)),
+            ),
+            dim=-1,
+        ).to(torch.float32)
+
+        return x_xy
 
 
 class ContinuousAlphabet(Dataset):
-    def __init__(self, params: NosmodDatasetParams):
+    def __init__(self, params: NosmodDataGeneratorParams):
         self.params = params
 
     def __len__(self):
         return self.params.num_samples
 
-    def __getitem__(self, idx) -> Tuple[Tensor, Tensor]:
+    def __getitem__(self, idx) -> Tensor:
         """Generate a pair of continuous valued symbols.
 
         Args:
             idx (int, Tensor[int])
 
         Returns:
-            Tuple[Tensor, Tensor]: Tuple of two tensors containing the x and y symbols.
+            Tensor["num_symbols, 2", float32]: Continuous valued symbols.
         """
         # Generate continuous valued data in the range [0, alphabet_size)
-        x_x = torch.rand(self.params.num_symbols) * self.params.alphabet_size
-        x_y = torch.rand(self.params.num_symbols) * self.params.alphabet_size
-        return x_x, x_y
+        x_xy = torch.stack(
+            (
+                torch.rand(self.params.num_symbols) * self.params.alphabet_size,
+                torch.rand(self.params.num_symbols) * self.params.alphabet_size,
+            ),
+            dim=-1,
+        ).to(torch.float32)
+
+        return x_xy
 
 
 class AlphabetType(Enum):
@@ -70,7 +92,7 @@ class AlphabetType(Enum):
     CONTINUOUS = auto()
 
     @classmethod
-    def get_dataset(cls, params: NosmodDatasetParams) -> Dataset:
+    def get_dataset(cls, params: NosmodDataGeneratorParams) -> Dataset:
         if params.alphabet == cls.DIGITAL:
             return DigitalAlphabet(params)
         elif params.alphabet == cls.CONTINUOUS:
@@ -79,8 +101,8 @@ class AlphabetType(Enum):
             raise ValueError(f"Unknown alphabet type: {params.alphabet}")
 
 
-class NosmodDataset(Dataset):
-    def __init__(self, params: NosmodDatasetParams):
+class NosmodDataGenerator(Dataset):
+    def __init__(self, params: NosmodDataGeneratorParams):
         self.params = params
         self.dataset = AlphabetType.get_dataset(params)
 
@@ -91,5 +113,5 @@ class NosmodDataset(Dataset):
     def __len__(self):
         return len(self.dataset)
 
-    def __getitem__(self, idx) -> Tuple[Tensor, Tensor]:
-        return self.dataset[idx]  # type: ignore
+    def __getitem__(self, idx) -> Tensor:
+        return self.dataset[idx]
