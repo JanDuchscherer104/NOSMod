@@ -7,7 +7,6 @@ from torch import Tensor, nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import StepLR
 
-from ..config import Config
 from ..network_components.mod_trans_demod_system import NosmodSystemParams
 from ..utils import CONSOLE, BaseConfig
 
@@ -22,7 +21,7 @@ class HParams(BaseConfig["LitNOSModModule"]):
 
 
 class LitNOSModModule(pl.LightningModule):
-    config: Config
+    config: HParams
 
     def __init__(self, params: HParams):
         """

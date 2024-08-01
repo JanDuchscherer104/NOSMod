@@ -20,7 +20,7 @@ class DatamoduleParams(BaseConfig["LitNosmodDatamodule"]):
     num_workers: int = -1
     pin_memory: bool = True
 
-    dataset = {
+    dataset: dict[Stage, NosmodDataGeneratorParams] = {
         split: NosmodDataGeneratorParams(
             split=split,
         )

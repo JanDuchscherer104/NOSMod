@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 from pytorch_lightning import LightningModule, Trainer
 from torch import nn
 
-from ..config import Config, SqrtFilterParams
+from ..config import ExperimentConfig, SqrtFilterParams
 from .filter_dataset import SqrtFilterDataModule
 from .sqrt_filter import generate_sqrt_filter_train_data
 
@@ -42,7 +42,7 @@ class LitSqrtFilterModule(LightningModule):
 
 
 def main():
-    config = Config()
+    config = ExperimentConfig()
     generate_sqrt_filter_train_data(config)
     print("Data generated")
     data_module = SqrtFilterDataModule(
@@ -82,7 +82,7 @@ def main():
 
 def test():
 
-    config = Config(sqrt_filter_params=SqrtFilterParams(num_samples=1000))
+    config = ExperimentConfig(sqrt_filter_params=SqrtFilterParams(num_samples=1000))
     trainer = Trainer(max_epochs=config.sqrt_filter_params.num_epochs)
     # Initialize the model
     model = LitSqrtFilterModule(
