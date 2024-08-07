@@ -8,17 +8,20 @@ from .data_generator import NosmodDataGeneratorParams
 from .demodulator import DemodulatorParams
 from .modulator import ModulatorParams
 from .raised_cos_filter import RaisedCosParams
-from .symbol_predictor import SymbolPredictor
+from .symbol_predictor import SymbolPredictorParams
 
 
 class NosmodSystemParams(BaseConfig["NosmodSystem"]):
     target: Type["NosmodSystem"] = Field(default_factory=lambda: NosmodSystem)
 
-    mod_params: ModulatorParams = Field(default_factory=ModulatorParams)
-    raised_cos_params: RaisedCosParams = Field(default_factory=RaisedCosParams)
-    demod_params: DemodulatorParams = Field(default_factory=DemodulatorParams)
-    data_gen_params: NosmodDataGeneratorParams = Field(
-        default_factory=NosmodDataGeneratorParams
+    mod: ModulatorParams = Field(default_factory=ModulatorParams)
+    raised_cos: RaisedCosParams = Field(default_factory=RaisedCosParams)
+    demod: DemodulatorParams = Field(default_factory=DemodulatorParams)
+    # data_gen_params: NosmodDataGeneratorParams = Field(
+    #     default_factory=NosmodDataGeneratorParams
+    # )
+    symbol_predictor: SymbolPredictorParams = Field(
+        default_factory=SymbolPredictorParams
     )
 
 
@@ -30,12 +33,10 @@ class NosmodSystem(nn.Module):
         super().__init__()
         self.params = params
 
-        self.modulator = self.params.mod_params.setup_target()
-        self.channel = self.params.raised_cos_params.setup_target()
-        self.demodulator = self.params.demod_params.setup_target()
-        self.symbol_predictor = SymbolPredictor(
-            self.params.data_gen_params.alphabet_size
-        )
+        self.modulator = self.params.mod.setup_target()
+        self.channel = self.params.raised_cos.setup_target()
+        self.demodulator = self.params.demod.setup_target()
+        self.symbol_predictor = self.params.symbol_predictor.setup_target()
 
         CONSOLE.log(f"Initialized {self.__class__.__name__}")
 

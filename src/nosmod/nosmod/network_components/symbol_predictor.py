@@ -1,5 +1,15 @@
+from typing import Optional, Type
+
 import torch
+from pydantic import Field
 from torch import Tensor, nn
+
+from ..utils import BaseConfig
+
+
+class SymbolPredictorParams(BaseConfig["SymbolPredictor"]):
+    target: Type["SymbolPredictor"] = Field(default_factory=lambda: SymbolPredictor)
+    alphabet_size: Optional[int] = None
 
 
 class SymbolPredictor(nn.Module):
@@ -17,5 +27,7 @@ class SymbolPredictor(nn.Module):
         Returns:
             Tensor["B, alphabet_size", float32]: Predicted symbols in the original alphabet space.
         """
-        predicted_symbols = soft_symbols @ torch.arange(self.alphabet_size).float()
+        predicted_symbols = soft_symbols @ torch.arange(
+            self.alphabet_size, dtype=torch.float64
+        )
         return predicted_symbols

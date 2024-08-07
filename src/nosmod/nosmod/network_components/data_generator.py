@@ -1,5 +1,5 @@
 from enum import Enum, auto
-from typing import Tuple, Type
+from typing import Optional, Tuple, Type
 
 import torch
 from pydantic import Field, field_validator
@@ -7,6 +7,7 @@ from torch import Tensor
 from torch.utils.data import Dataset
 
 from ..utils import CONSOLE, BaseConfig, Stage
+from .shared_params import TemporalParams
 
 """
 TODO: Split in (test, val): do not generate new data for each epoch!
@@ -14,16 +15,17 @@ TODO: Split in (test, val): do not generate new data for each epoch!
 
 
 class NosmodDataGeneratorParams(BaseConfig["NosmodDataGenerator"]):
+    num_epochs: int
+    batch_size: int
     target: Type["NosmodDataGenerator"] = Field(
         default_factory=lambda: NosmodDataGenerator
     )
     split: Stage = Field(default=Stage.TRAIN)
-    alphabet: "AlphabetType" = Field(default_factory=lambda: AlphabetType.DIGITAL)
-    num_symbols: int = 128
-    num_samples: int = 1000
-    samples_per_symbol: int = 32
-    alphabet_size: int = 4
     generate_per_epoch: bool = True
+    alphabet: "AlphabetType" = Field(default_factory=lambda: AlphabetType.DIGITAL)
+    temporal: TemporalParams = Field(default_factory=TemporalParams)
+
+    alphabet_size: int = 4
 
     @field_validator("alphabet_size")
     def __val_alphabet_size(cls, v, _):
@@ -37,24 +39,44 @@ class DigitalAlphabet(Dataset):
         self.params = params
 
     def __len__(self):
-        return self.params.num_samples
+        return self.params.batch_size * self.params.num_epochs
 
     def __getitem__(self, idx) -> Tensor:
-        """_summary_
+        """Generate a batch of digital symbols.
 
         Args:
             idx (_type_): _description_
 
         Returns:
-            Tensor["num_symbols, 2", float32]: _description_
+            Tensor["B, 2, num_symbols", float32]: Batch of digital symbols.
         """
-        x_xy = torch.stack(
-            (
-                torch.randint(0, self.params.alphabet_size, (self.params.num_symbols,)),
-                torch.randint(0, self.params.alphabet_size, (self.params.num_symbols,)),
-            ),
-            dim=-1,
-        ).to(torch.float32)
+        num_symbols = self.params.temporal.num_symbols
+        # Generate random integer values representing symbols for x and y polarization
+        x_xy = (
+            torch.stack(
+                (
+                    torch.randint(
+                        0,
+                        self.params.alphabet_size,
+                        (
+                            self.params.batch_size,
+                            num_symbols,
+                        ),
+                    ),
+                    torch.randint(
+                        0,
+                        self.params.alphabet_size,
+                        (
+                            self.params.batch_size,
+                            num_symbols,
+                        ),
+                    ),
+                ),
+                dim=0,  # Stack along the first dimension (for x and y)
+            )
+            .unsqueeze(0)
+            .to(torch.float32)
+        )  # Add a new batch dimension
 
         return x_xy
 
