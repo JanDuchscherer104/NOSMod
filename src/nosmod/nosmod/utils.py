@@ -19,10 +19,14 @@ class _Console(RichConsole):
         return cls._instance
 
     def warn(self, message: str) -> None:
-        stack = traceback.extract_stack()
-        filename, lineno, _, _ = stack[-2]
+        # Capture the full stack trace
+        stack_trace = traceback.format_stack(limit=3)[:-1]
+        stack_trace_formatted = "".join(stack_trace)
+
+        # Print the warning message with the stack trace
         self.print(
-            f"[bright_yellow]Warning:[/bright_yellow] [yellow]{formatwarning(message, UserWarning, filename, lineno)}[/yellow]"
+            f"[bright_yellow]Warning:[/bright_yellow] {message}\n"
+            f"[dim]{stack_trace_formatted}[/dim]"
         )
 
 
@@ -32,8 +36,17 @@ CONSOLE = _Console(width=120)
 TargetType = TypeVar("TargetType")
 
 
+class NoTarget:
+    @staticmethod
+    def setup_target(config: "BaseConfig", **kwargs: Any) -> None:
+        CONSOLE.warn(
+            f"No target specified for config '{config.__class__.__name__}'. Returning None!"
+        )
+        return None
+
+
 class BaseConfig(BaseModel, Generic[TargetType]):
-    target: Callable = Field(default_factory=lambda: None)
+    target: TargetType = Field(default_factory=lambda: NoTarget)
 
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_default=True)
 
@@ -104,6 +117,47 @@ class BaseConfig(BaseModel, Generic[TargetType]):
     #             check_fields(cls, field_values)
 
     #     return self
+
+
+_singleton_instances = {}  # type: ignore
+
+
+class _SharedParams(BaseModel):
+    """
+    _SharedParams acts as a singleton base class for any shared configuration
+    parameters. Derived classes will share the same instance across the application.
+    """
+
+    def __new__(cls, *args, **kwargs):
+        if cls in _singleton_instances:
+            instance = _singleton_instances[cls]
+            # Check for differences between existing attributes and new arguments
+            new_values = cls._get_relevant_kwargs(kwargs)
+            for key, value in new_values.items():
+                if getattr(instance, key) != value:
+                    CONSOLE.warn(
+                        f"Singleton instance of {cls.__name__} is being modified. "
+                        f"Field '{key}' changed from {getattr(instance, key)} to {value}."
+                    )
+                    setattr(instance, key, value)
+        else:
+            instance = super().__new__(cls)
+            _singleton_instances[cls] = instance
+        return instance
+
+    @classmethod
+    def _get_relevant_kwargs(cls, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """
+        Filter out only the keyword arguments that are relevant to the class.
+        This helps in comparing new values with the existing instance's values.
+        """
+        relevant_kwargs = {}
+        for key, value in kwargs.items():
+            if (
+                key in cls.model_fields
+            ):  # Only consider fields defined in the Pydantic model
+                relevant_kwargs[key] = value
+        return relevant_kwargs
 
 
 class Stage(Enum):

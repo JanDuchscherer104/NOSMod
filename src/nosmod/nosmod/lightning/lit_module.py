@@ -8,6 +8,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import StepLR
 
 from ..network_components.mod_trans_demod_system import NosmodSystemParams
+from ..network_components.shared_params import TemporalParams
 from ..utils import CONSOLE, BaseConfig
 
 

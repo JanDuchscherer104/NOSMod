@@ -1,8 +1,9 @@
 from typing import Callable, Optional, Type
 
 import pytorch_lightning as pl
-from pydantic import Field
+from pydantic import Field, ValidationInfo, computed_field, field_validator
 from torch.utils.data import DataLoader
+from typing_extensions import Annotated
 
 from ..network_components.data_generator import (
     NosmodDataGenerator,
@@ -17,16 +18,23 @@ class DatamoduleParams(BaseConfig["LitNosmodDatamodule"]):
     )
 
     batch_size: int = 512
+    num_epochs: int = 100
     num_workers: int = -1
     pin_memory: bool = True
 
-    dataset: dict[Stage, NosmodDataGeneratorParams] = {
-        split: NosmodDataGeneratorParams(
-            split=split,
-        )
-        for split in Stage
-    }
     transforms: Callable = lambda x: x
+
+    @computed_field  # type: ignore
+    @property
+    def dataset(self) -> dict[Stage, NosmodDataGeneratorParams]:
+        return {
+            split: NosmodDataGeneratorParams(
+                split=split,
+                batch_size=self.batch_size,
+                num_epochs=self.num_epochs,
+            )
+            for split in Stage
+        }
 
 
 class LitNosmodDatamodule(pl.LightningDataModule):

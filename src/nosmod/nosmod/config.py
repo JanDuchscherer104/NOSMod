@@ -1,18 +1,24 @@
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Dict, Literal, Optional
+from typing import Annotated, Dict, Literal, Optional, Type
 
 import mlflow
 import psutil
 from pydantic import Field, ValidationInfo, field_validator, model_validator
+from typing_extensions import Self
 
-from .utils import YamlBaseModel
+from .lightning.lit_datamodule import DatamoduleParams, LitNosmodDatamodule
+from .lightning.lit_module import HParams, LitNOSModModule
+from .network_components.mod_trans_demod_system import NosmodSystemParams
+from .network_components.raised_cos_filter import RaisedCosParams
+from .utils import CONSOLE, BaseConfig, Stage
 
 ROOT = Path(__file__).parents[3].resolve()
 
 
-class Paths(YamlBaseModel):
+class Paths(BaseConfig):
+    target: Type["Paths"] = Field(default_factory=lambda: Paths)
     root: Path = Field(default=ROOT)
     data: Annotated[Path, Field(default=".data", validate_default=True)]
     checkpoints: Annotated[
@@ -70,36 +76,43 @@ class Paths(YamlBaseModel):
         return self.data / "sqrt_filter" / self.sqrt_filter_file_name
 
 
-class SqrtFilterParams(YamlBaseModel):
-    nos: int = 128 * 1
-    sps: int = 32
-    symbolrate: float = 40e9
-    num_samples: int = 30000
-    n_features: int = 4
-    samplen: bool = False
-    batch_size: int = 128
-    num_epochs: int = 100
+class MLflowConfig(BaseConfig):
+    target: Type["MLflowConfig"] = Field(default_factory=lambda: MLflowConfig)
+    experiment_name: str = "nosmod"
+    run_name: Annotated[str, Field(default="None")]
+    experiment_id: Annotated[str, Field(default="None")]
 
 
-class MLflowConfig(YamlBaseModel):
-    experiment_name: str = "DL-EXP"
-    run_name: Annotated[str, Field(default=None)]
-    experiment_id: Annotated[str, Field(default=None)]
+class _ExperimentConfig(BaseConfig):
+    """
+    TODO: add MachineConfig
+    TODO: add TrainerConfig
+    """
 
+    module: HParams = Field(
+        default_factory=lambda: HParams(
+            nosmod_system=NosmodSystemParams(
+                raised_cos=RaisedCosParams(
+                    rolloff_fact=0.5,
+                    sampling_freq=1e4,
+                    center_freq=1e3,
+                ),
+            ),
+        )
+    )
+    datamodule: DatamoduleParams = Field(default_factory=DatamoduleParams)
 
-class Config(YamlBaseModel):
     is_debug: bool = False
     verbose: bool = True
     from_ckpt: Optional[str] = None
     is_multiproc: bool = True
     num_workers: Optional[int] = None
     is_optuna: bool = False
-    is_lr_scheduler: bool = False
-    pin_memory: bool = True
     max_epochs: int = 50
     early_stopping_patience: int = 2
     log_every_n_steps: int = 8
     is_gpu: bool = True
+    matmul_precision: Literal["medium", "high"] = "medium"
     is_fast_dev_run: bool = False
     active_callbacks: Dict[
         Literal[
@@ -122,11 +135,21 @@ class Config(YamlBaseModel):
     paths: Paths = Field(default_factory=Paths)
     mlflow_config: MLflowConfig = Field(default_factory=MLflowConfig)
 
+    module_type: Type["LitNOSModModule"] = Field(default=LitNOSModModule)
+    datamodule_type: Type["LitNosmodDatamodule"] = Field(default=LitNosmodDatamodule)
+
     def dump_yaml(self) -> None:
         self.to_yaml(self.paths.configs)
 
     @model_validator(mode="after")
-    def __setup_mlflow(self) -> "Config":
+    def __share_fields(self) -> Self:
+        self.module.nosmod_system.symbol_predictor.alphabet_size = (
+            self.datamodule.dataset[Stage.TRAIN].alphabet_size
+        )
+        return self
+
+    @model_validator(mode="after")
+    def __setup_mlflow(self) -> Self:
         mlflow.set_tracking_uri(self.paths.mlflow_uri)
         experiment = mlflow.get_experiment_by_name(self.mlflow_config.experiment_name)
         experiment_id = (
@@ -164,20 +187,7 @@ class Config(YamlBaseModel):
         self.to_yaml(config_file)
 
     @classmethod
-    def read(cls, file_name: str) -> "Config":
+    def read(cls, file_name: str) -> Self:
         config_file = (ROOT / ".configs" / file_name).with_suffix(".yaml")
         assert config_file.exists(), f"{config_file} does not exist"
         return cls.from_yaml(config_file)  # type: ignore
-
-
-class HyperParameters(YamlBaseModel):
-    batch_size: int = 128
-    learning_rate: float = 1e-3
-    weight_decay: float = 1e-4
-    num_epochs: int = 100
-
-
-if __name__ == "__main__":
-    config = Config.read("R001-Apr22")
-    # config.dump()
-    pass
